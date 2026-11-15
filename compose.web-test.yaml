@@ -1,0 +1,7 @@
+# Browser acceptance only: local loopback API behind Vite's same-origin proxy.
+services:
+  api:
+    ports: ['127.0.0.1:3000:3000']
+    networks: [data, browser-test]
+networks:
+  browser-test: {}

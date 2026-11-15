@@ -1,0 +1,127 @@
+name: videoflow-media-test
+x-runtime: &runtime
+  image: videoflow-media:development
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ['/tmp:size=128m,mode=1777']
+  pids_limit: 128
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: '3'}
+services:
+  postgres:
+    extends: {file: compose.foundation.yaml, service: postgres}
+    networks: [data]
+  redis:
+    extends: {file: compose.foundation.yaml, service: redis}
+    networks: [data]
+  initialize:
+    image: videoflow-media:development
+    user: root
+    network_mode: none
+    volumes: [commands:/spool/commands, results:/spool/results, temporary:/media/temp, artifacts:/media/artifacts]
+    command: [sh, -c, 'chown 1000:1000 /spool/commands /spool/results /media/temp /media/artifacts']
+  migrate:
+    <<: *runtime
+    networks: [data]
+    environment:
+      DATABASE_URL: postgresql://videoflow:foundation-local-only@postgres:5432/videoflow_test
+    depends_on:
+      postgres: {condition: service_healthy}
+    command: [npm, run, db:migrate]
+  egress:
+    <<: *runtime
+    networks: [media, outbound]
+    mem_limit: 256m
+    command: [node, workers/media-worker/dist/gateway-main.js]
+    healthcheck:
+      test: [CMD, node, -e, "const n=require('net').connect(3128,'127.0.0.1',()=>{n.end();process.exit(0)});n.on('error',()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  sandbox:
+    <<: *runtime
+    networks: [media]
+    mem_limit: 2g
+    cpus: 2
+    volumes: [commands:/spool/commands:ro, results:/spool/results, temporary:/media/temp]
+    depends_on:
+      initialize: {condition: service_completed_successfully}
+      egress: {condition: service_healthy}
+    command: [node, workers/media-worker/dist/sandbox.js]
+    healthcheck:
+      test: [CMD, node, -e, "process.exit(Date.now()-Number(require('fs').readFileSync('/tmp/sandbox-heartbeat'))<10000?0:1)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  worker:
+    <<: *runtime
+    networks: [data]
+    mem_limit: 512m
+    cpus: 1
+    environment:
+      DATABASE_URL: postgresql://videoflow:foundation-local-only@postgres:5432/videoflow_test
+      REDIS_URL: redis://redis:6379
+    volumes: [commands:/spool/commands, results:/spool/results, temporary:/media/temp, artifacts:/media/artifacts]
+    depends_on:
+      initialize: {condition: service_completed_successfully}
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      sandbox: {condition: service_healthy}
+    command: [node, workers/media-worker/dist/main.js]
+    healthcheck:
+      test: [CMD, node, -e, "process.exit(Date.now()-Number(require('fs').readFileSync('/tmp/worker-heartbeat'))<10000?0:1)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  api:
+    <<: *runtime
+    networks: [data]
+    mem_limit: 512m
+    cpus: 1
+    environment:
+      DATABASE_URL: postgresql://videoflow:foundation-local-only@postgres:5432/videoflow_test
+      REDIS_URL: redis://redis:6379
+      ORIGIN: http://localhost:8080
+      ARTIFACT_ROOT: /media/artifacts
+    volumes: [artifacts:/media/artifacts:ro]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    command: [node, apps/api/dist/main.js]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+  quality:
+    <<: *runtime
+    networks: [data]
+    environment:
+      DATABASE_URL: postgresql://videoflow:foundation-local-only@postgres:5432/videoflow_test
+      REDIS_URL: redis://redis:6379
+      ORIGIN: http://localhost:8080
+      ARTIFACT_ROOT: /media/artifacts
+      RUN_MEDIA: '1'
+      XDG_DATA_HOME: /tmp
+    volumes: [artifacts:/media/artifacts:ro]
+    depends_on:
+      worker: {condition: service_healthy}
+    command: [npm, test, --, --configLoader, runner, tests/media.integration.test.ts, tests/media-api.integration.test.ts]
+networks:
+  foundation: {internal: true}
+  data: {internal: true}
+  media:
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+  outbound: {}
+volumes:
+  foundation-postgres:
+  foundation-redis:
+  commands:
+  results:
+  temporary:
+  artifacts:

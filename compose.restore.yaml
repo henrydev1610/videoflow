@@ -1,0 +1,20 @@
+name: videoflow-restore
+services:
+  restore-postgres:
+    image: postgres:17.6-bookworm@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3
+    user: postgres
+    environment:
+      POSTGRES_USER: videoflow
+      POSTGRES_PASSWORD: restore-test-only
+      POSTGRES_DB: videoflow_restore
+    volumes: [restore-pg:/var/lib/postgresql/data]
+    networks: [restore]
+    healthcheck:
+      test: [CMD, pg_isready, -U, videoflow, -d, videoflow_restore]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+networks:
+  restore: { internal: true }
+volumes:
+  restore-pg:

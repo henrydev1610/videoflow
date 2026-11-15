@@ -1,0 +1,6 @@
+node_modules
+**/dist
+**/generated
+openspec
+.agents
+package-lock.json

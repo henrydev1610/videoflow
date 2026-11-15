@@ -1,0 +1,5 @@
+name: videoflow-migration-failure
+services:
+  videoflow-migrate:
+    volumes:
+      - ./tests/fixtures/invalid-migration:/workspace/apps/api/prisma/migrations/209901010001_invalid:ro

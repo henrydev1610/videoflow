@@ -1,0 +1,27 @@
+# Test-only exception. No production entrypoint reads a private-host bypass variable.
+services:
+  fixture:
+    image: videoflow-media:development
+    user: node
+    init: true
+    networks: [outbound]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: ['/tmp:size=256m,mode=1777']
+    command: [node, --import, tsx, tests/fixtures/media-server.ts]
+    volumes: ['./tests:/workspace/tests:ro']
+  egress:
+    command: [node, --import, tsx, tests/fixtures/gateway-test.ts]
+    volumes: ['./tests:/workspace/tests:ro', './workers/media-worker/src:/workspace/workers/media-worker/src:ro']
+  sandbox:
+    command: [node, --import, tsx, workers/media-worker/src/sandbox.ts]
+    volumes: ['./workers/media-worker/src:/workspace/workers/media-worker/src:ro', './tests:/workspace/tests:ro']
+  worker:
+    command: [node, --import, tsx, workers/media-worker/src/main.ts]
+    volumes: ['./workers/media-worker/src:/workspace/workers/media-worker/src:ro']
+  quality:
+    volumes: ['./tests:/workspace/tests:ro', './workers/media-worker/src:/workspace/workers/media-worker/src:ro', './apps/api/src:/workspace/apps/api/src:ro', './vitest.config.ts:/workspace/vitest.config.ts:ro']
+  api:
+    command: [node, --import, tsx, apps/api/src/main.ts]
+    volumes: ['./apps/api/src:/workspace/apps/api/src:ro']

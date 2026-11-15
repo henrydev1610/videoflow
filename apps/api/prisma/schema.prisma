@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum JobStatus {
+  PENDING
+  DOWNLOADING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+model AnonymousContext {
+  id String @id @default(uuid()) @db.Uuid
+  tokenHash String @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  jobs DownloadJob[]
+  inspections MediaInspection[]
+  idempotency IdempotencyRecord[]
+  @@index([expiresAt])
+}
+
+model MediaInspection {
+  id String @id @default(uuid()) @db.Uuid
+  contextId String @db.Uuid
+  context AnonymousContext @relation(fields: [contextId], references: [id], onDelete: Cascade)
+  sourceUrl String
+  title String
+  source String
+  durationSeconds Float?
+  availableFormats String[]
+  metadata Json
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  @@index([expiresAt])
+  @@index([contextId, id])
+}
+
+model DownloadJob {
+  id String @id @default(uuid()) @db.Uuid
+  contextId String @db.Uuid
+  context AnonymousContext @relation(fields: [contextId], references: [id], onDelete: Cascade)
+  sourceUrl String
+  title String
+  source String
+  durationSeconds Float?
+  format String
+  quality String
+  status JobStatus @default(PENDING)
+  progress Int @default(0)
+  progressIndeterminate Boolean @default(true)
+  attemptCount Int @default(0)
+  cycle Int @default(1)
+  generation Int @default(1)
+  cancelRequestedAt DateTime?
+  leaseOwner String?
+  leaseExpiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  completedAt DateTime?
+  historyExpiresAt DateTime
+  errorCode String?
+  errorMessage String?
+  attempts DownloadAttempt[]
+  artifact FileArtifact?
+  events OutboxEvent[]
+  idempotency IdempotencyRecord[]
+  @@index([contextId, createdAt, id])
+  @@index([contextId, status, createdAt])
+  @@index([status, leaseExpiresAt])
+  @@index([historyExpiresAt])
+}
+
+model DownloadAttempt {
+  id String @id @default(uuid()) @db.Uuid
+  jobId String @db.Uuid
+  job DownloadJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  sequence Int
+  cycle Int
+  generation Int
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  outcome String?
+  errorCode String?
+  errorMessage String?
+  @@unique([jobId, sequence])
+}
+
+model FileArtifact {
+  id String @id @default(uuid()) @db.Uuid
+  jobId String @unique @db.Uuid
+  job DownloadJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  storageKey String @unique
+  mime String
+  bytes BigInt
+  checksum String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  @@index([expiresAt])
+}
+
+model OutboxEvent {
+  id String @id @default(uuid()) @db.Uuid
+  jobId String @db.Uuid
+  job DownloadJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  generation Int
+  type String
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([jobId, generation, type])
+  @@index([deliveredAt, createdAt])
+}
+
+model IdempotencyRecord {
+  id String @id @default(uuid()) @db.Uuid
+  contextId String @db.Uuid
+  context AnonymousContext @relation(fields: [contextId], references: [id], onDelete: Cascade)
+  key String @db.Uuid
+  requestHash String
+  jobId String @db.Uuid
+  job DownloadJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  @@unique([contextId, key])
+}
+
+model QuotaCounter {
+  key String @id
+  active Int @default(0)
+}

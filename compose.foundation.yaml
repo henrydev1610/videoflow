@@ -1,0 +1,48 @@
+name: videoflow-foundation
+services:
+  postgres:
+    image: postgres:17.6-bookworm@sha256:f3bd19c606e442c3d7bdfa8002e03fe260a1023351e0ea4598032022b68dd6e3
+    environment:
+      POSTGRES_USER: videoflow
+      POSTGRES_PASSWORD: foundation-local-only
+      POSTGRES_DB: videoflow_test
+    volumes:
+      - foundation-postgres:/var/lib/postgresql/data
+    networks: [foundation]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U videoflow -d videoflow_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7.4.6-bookworm@sha256:a9cc41d6d01da2aa26c219e4f99ecbeead955a7b656c1c499cce8922311b2514
+    command: [redis-server, --appendonly, 'yes', --maxmemory-policy, noeviction]
+    volumes:
+      - foundation-redis:/data
+    networks: [foundation]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  quality:
+    build:
+      context: .
+      dockerfile: infra/docker/foundation.Dockerfile
+    environment:
+      DATABASE_URL: postgresql://videoflow:foundation-local-only@postgres:5432/videoflow_test
+      REDIS_URL: redis://redis:6379
+      ORIGIN: http://localhost:8080
+      ARTIFACT_ROOT: /tmp/videoflow-artifacts
+      RUN_INTEGRATION: '1'
+    networks: [foundation]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: [sh, -c, "npm run db:migrate && npm run lint && npm run typecheck && npm test && npm run build"]
+networks:
+  foundation:
+    internal: true
+volumes:
+  foundation-postgres:
+  foundation-redis:

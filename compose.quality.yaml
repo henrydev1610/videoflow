@@ -1,0 +1,9 @@
+services:
+  quality:
+    image: videoflow-media:development
+    volumes:
+      - ./tests:/workspace/tests:ro
+      - ./workers/media-worker/src:/workspace/workers/media-worker/src:ro
+      - ./apps/api/src:/workspace/apps/api/src:ro
+      - ./vitest.config.ts:/workspace/vitest.config.ts:ro
+    command: [npm, test, --, --configLoader, runner]

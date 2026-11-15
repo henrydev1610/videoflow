@@ -1,0 +1,3 @@
+# VideoFlow
+
+Painel operacional em pt-BR para visitantes com autorização sobre a mídia. Sem contas. O design e o comportamento aprovados estão em openspec/changes/implement-videoflow-dashboard. Cinco áreas: Dashboard, Novo Download, Gerenciador, Histórico, Configurações. Dados reais do Fastify; capacidade HttpOnly controlada pelo servidor. Tema sistema/claro/escuro, layout CRM, tipografia de sistema, contraste AA, uso por teclado e telas 360–1440 px. Implementação segue diretamente esta autorização e o design aprovado, sem uma nova rodada de escolha visual. A direção cromática neutra/verde é uma decisão cosmética reversível, não um novo contrato.
